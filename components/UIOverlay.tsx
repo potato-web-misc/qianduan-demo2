@@ -9,10 +9,10 @@ interface UIOverlayProps {
 
 export const UIOverlay: React.FC<UIOverlayProps> = ({ onExplore, onReturn, isExploring }) => {
   return (
-    <div className="w-full h-full flex flex-col justify-between p-6 md:p-12 transition-opacity duration-500 pointer-events-auto">
+    <div className="w-full h-full flex flex-col justify-between p-6 md:p-12 transition-opacity duration-500 pointer-events-none">
       
       {/* Header / Nav */}
-      <header className={`flex justify-between items-center transition-all duration-500 ${isExploring ? 'opacity-0 -translate-y-10 pointer-events-none' : 'opacity-100'}`}>
+      <header className={`flex justify-between items-center transition-all duration-500 pointer-events-auto ${isExploring ? 'opacity-0 -translate-y-10 pointer-events-none' : 'opacity-100'}`}>
         <div className="flex items-center gap-2">
             <div className="w-8 h-8 bg-gradient-to-br from-accent-500 to-blue-600 rounded-full flex items-center justify-center shadow-[0_0_15px_rgba(124,58,237,0.5)]">
                 <Star className="w-4 h-4 text-white fill-white" />
@@ -34,7 +34,7 @@ export const UIOverlay: React.FC<UIOverlayProps> = ({ onExplore, onReturn, isExp
       <main className="relative flex-grow flex items-center">
         
         {/* Hero Section (Home) */}
-        <div className={`w-full md:w-2/3 lg:w-1/2 transition-all duration-700 transform ${isExploring ? 'opacity-0 -translate-x-20 pointer-events-none absolute' : 'opacity-100 translate-x-0 relative'}`}>
+        <div className={`w-full md:w-2/3 lg:w-1/2 transition-all duration-700 transform pointer-events-auto ${isExploring ? 'opacity-0 -translate-x-20 pointer-events-none absolute' : 'opacity-100 translate-x-0 relative'}`}>
             <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/10 backdrop-blur-md border border-white/10 text-xs font-medium text-accent-400 mb-6">
                 <span className="w-2 h-2 rounded-full bg-accent-400 animate-pulse"></span>
                 Interactive 3D Experience
@@ -79,8 +79,9 @@ export const UIOverlay: React.FC<UIOverlayProps> = ({ onExplore, onReturn, isExp
         </div>
 
         {/* Explore Mode UI (Appears when Explore is clicked) */}
-        <div className={`absolute inset-0 flex flex-col items-center justify-center transition-all duration-1000 ${isExploring ? 'opacity-100 scale-100 pointer-events-auto' : 'opacity-0 scale-90 pointer-events-none'}`}>
-            <div className="text-center space-y-6">
+        {/* IMPORTANT: The container is pointer-events-none to let clicks pass through to canvas, only internal interactive elements have pointer-events-auto */}
+        <div className={`absolute inset-0 flex flex-col items-center justify-center transition-all duration-1000 pointer-events-none ${isExploring ? 'opacity-100 scale-100' : 'opacity-0 scale-90'}`}>
+            <div className={`text-center space-y-6 ${isExploring ? 'pointer-events-auto' : 'pointer-events-none'}`}>
                 <Globe className="w-16 h-16 text-accent-400 mx-auto animate-pulse-slow" />
                 <h2 className="text-4xl font-light text-white tracking-[0.2em]">DEEP SPACE</h2>
                 <p className="text-blue-200/60 max-w-md mx-auto">
@@ -99,7 +100,7 @@ export const UIOverlay: React.FC<UIOverlayProps> = ({ onExplore, onReturn, isExp
       </main>
 
       {/* Footer */}
-      <footer className={`flex justify-between items-end transition-opacity duration-500 ${isExploring ? 'opacity-0' : 'opacity-100'}`}>
+      <footer className={`flex justify-between items-end transition-opacity duration-500 pointer-events-auto ${isExploring ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}>
         <div className="text-xs text-gray-600">
             © 2024 Astra Technologies. All rights reserved.<br/>
             Rendered with React Three Fiber.
