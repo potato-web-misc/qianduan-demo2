@@ -588,6 +588,18 @@ export const Scene: React.FC<SceneProps> = ({ active }) => {
          <Stars radius={50} depth={50} count={3000} factor={4} saturation={0} fade speed={0.5} />
       </group>
 
+      <OrbitControls
+        enablePan={false}
+        enableZoom={true}
+        minDistance={5}
+        maxDistance={20}
+        maxPolarAngle={Math.PI * 0.8}
+        minPolarAngle={Math.PI * 0.2}
+        enableDamping
+        dampingFactor={0.05}
+        rotateSpeed={0.5}
+      />
+
       <CameraRig active={active} focusTarget={getCurrentFocus()} />
       
       <fog attach="fog" args={['#030305', 8, 30]} />
