@@ -1,27 +1,39 @@
-import React, { useRef, useMemo } from 'react';
+import React, { useRef, useMemo, useState, useEffect } from 'react';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
-import { Points, PointMaterial, Stars, Float } from '@react-three/drei';
+import { Points, PointMaterial, Stars, Float, Html, Billboard } from '@react-three/drei';
 import * as THREE from 'three';
 
-// Define and export props interface for usage in other files
 export interface SceneProps {
   active: boolean;
 }
 
+// Galaxy Generation Parameters
+const GALAXY_PARAMS = {
+  radius: 5,
+  branches: 3,
+  spin: 1,
+  randomness: 0.2,
+  randomnessPower: 3,
+  insideColor: '#ff6030',
+  outsideColor: '#1b3984',
+};
+
 /**
- * Generates geometry data for a spiral galaxy with realistic distribution
+ * Helper to calculate position on a spiral arm
  */
-const generateGalaxyData = (options: {
-  count: number;
-  radius: number;
-  branches: number;
-  spin: number;
-  randomness: number;
-  randomnessPower: number;
-  insideColor: string;
-  outsideColor: string;
-}) => {
-  const { count, radius, branches, spin, randomness, randomnessPower, insideColor, outsideColor } = options;
+const getSpiralPosition = (radius: number, branchIndex: number) => {
+    const spinAngle = radius * GALAXY_PARAMS.spin;
+    const branchAngle = ((branchIndex % GALAXY_PARAMS.branches) / GALAXY_PARAMS.branches) * Math.PI * 2;
+    const x = Math.cos(branchAngle + spinAngle) * radius;
+    const z = Math.sin(branchAngle + spinAngle) * radius;
+    return new THREE.Vector3(x, 0, z);
+};
+
+/**
+ * Generates geometry data for a spiral galaxy
+ */
+const generateGalaxyData = (count: number, options = GALAXY_PARAMS) => {
+  const { radius, branches, spin, randomness, randomnessPower, insideColor, outsideColor } = options;
   
   const positions = new Float32Array(count * 3);
   const colors = new Float32Array(count * 3);
@@ -31,33 +43,21 @@ const generateGalaxyData = (options: {
 
   for (let i = 0; i < count; i++) {
     const i3 = i * 3;
-
-    // Radius: Random distribution but we can shape it if needed
     const r = Math.random() * radius;
-
-    // Spin angle: The further out, the more it spins
     const spinAngle = r * spin;
-
-    // Branch angle: Split into n branches around the center
     const branchAngle = ((i % branches) / branches) * Math.PI * 2;
 
-    // Randomness (Spread)
-    // We use randomnessPower to concentrate stars closer to the main spiral arm curves
     const randomX = Math.pow(Math.random(), randomnessPower) * (Math.random() < 0.5 ? 1 : -1) * randomness * r;
     const randomY = Math.pow(Math.random(), randomnessPower) * (Math.random() < 0.5 ? 1 : -1) * randomness * r;
     const randomZ = Math.pow(Math.random(), randomnessPower) * (Math.random() < 0.5 ? 1 : -1) * randomness * r;
 
-    // Calculate final 3D position
     positions[i3] = Math.cos(branchAngle + spinAngle) * r + randomX;
-    positions[i3 + 1] = randomY; // Keep Y axis flatter for a disc shape
+    positions[i3 + 1] = randomY;
     positions[i3 + 2] = Math.sin(branchAngle + spinAngle) * r + randomZ;
 
-    // Color mixing based on distance from center
-    // Inner stars are warmer/brighter, outer stars are cooler/darker
     const mixedColor = colorInside.clone();
     mixedColor.lerp(colorOutside, r / radius);
 
-    // Add a tiny bit of random variation to each star's color
     mixedColor.r += (Math.random() - 0.5) * 0.05;
     mixedColor.g += (Math.random() - 0.5) * 0.05;
     mixedColor.b += (Math.random() - 0.5) * 0.05;
@@ -70,48 +70,37 @@ const generateGalaxyData = (options: {
   return { positions, colors };
 };
 
-const Galaxy: React.FC<{ active: boolean }> = ({ active }) => {
+const Galaxy: React.FC<{ active: boolean; dimmed: boolean }> = ({ active, dimmed }) => {
   const groupRef = useRef<THREE.Group>(null!);
+  const material1Ref = useRef<THREE.PointsMaterial>(null!);
+  const material2Ref = useRef<THREE.PointsMaterial>(null!);
 
-  // Layer 1: The main structural stars (High count, tight definition)
-  const mainStars = useMemo(() => generateGalaxyData({
-    count: 20000,
-    radius: 5,
-    branches: 3,
-    spin: 1,
-    randomness: 0.2,
-    randomnessPower: 3,
-    insideColor: '#ff6030', // Hot Core Orange
-    outsideColor: '#1b3984' // Deep Space Blue
-  }), []);
-
-  // Layer 2: Surrounding dust/nebula glow (Lower count, larger spread, more transparent)
-  const starDust = useMemo(() => generateGalaxyData({
-    count: 5000,
-    radius: 8,
-    branches: 3,
-    spin: 1,
-    randomness: 0.8, // Much more scattered
-    randomnessPower: 2,
-    insideColor: '#ff6030',
-    outsideColor: '#331b84' // Slightly purple outer
-  }), []);
+  const mainStars = useMemo(() => generateGalaxyData(20000, GALAXY_PARAMS), []);
+  const starDust = useMemo(() => generateGalaxyData(5000, { ...GALAXY_PARAMS, randomness: 0.8, radius: 8 }), []);
 
   useFrame((state, delta) => {
     if (groupRef.current) {
-        // Base rotation
-        // When active (exploring), rotate significantly faster for dramatic effect
-        const rotationSpeed = active ? 0.3 : 0.05; 
-        // Smoothly accelerate/decelerate would be better, but direct lerp here is simple
+        const rotationSpeed = active ? 0.1 : 0.05; 
         groupRef.current.rotation.y += delta * rotationSpeed;
+    }
+
+    // Smooth dimming when hovering the special star
+    const targetOpacity1 = dimmed ? 0.1 : 1.0;
+    const targetOpacity2 = dimmed ? 0.02 : 0.4;
+    
+    if (material1Ref.current) {
+        material1Ref.current.opacity = THREE.MathUtils.lerp(material1Ref.current.opacity, targetOpacity1, delta * 4);
+    }
+    if (material2Ref.current) {
+        material2Ref.current.opacity = THREE.MathUtils.lerp(material2Ref.current.opacity, targetOpacity2, delta * 4);
     }
   });
 
   return (
     <group ref={groupRef} dispose={null} rotation={[0.2, 0, 0]}>
-      {/* Main Star Layer */}
       <Points positions={mainStars.positions} colors={mainStars.colors} stride={3} frustumCulled={false}>
         <PointMaterial
+          ref={material1Ref}
           transparent
           vertexColors
           size={0.015}
@@ -120,17 +109,16 @@ const Galaxy: React.FC<{ active: boolean }> = ({ active }) => {
           blending={THREE.AdditiveBlending}
         />
       </Points>
-
-      {/* Glow/Dust Layer */}
       <Points positions={starDust.positions} colors={starDust.colors} stride={3} frustumCulled={false}>
         <PointMaterial
+          ref={material2Ref}
           transparent
           vertexColors
-          size={0.04} // Larger particles
+          size={0.04}
           sizeAttenuation={true}
           depthWrite={false}
           blending={THREE.AdditiveBlending}
-          opacity={0.4} // More subtle
+          opacity={0.4} 
         />
       </Points>
     </group>
@@ -138,64 +126,267 @@ const Galaxy: React.FC<{ active: boolean }> = ({ active }) => {
 };
 
 /**
- * Handles camera movement logic separated from the render
+ * A special star system embedded in the galaxy arm
  */
-const CameraRig: React.FC<{ active: boolean }> = ({ active }) => {
+const WisdomSystem: React.FC<{ active: boolean; onHover: (hovering: boolean) => void; isHovered: boolean }> = ({ active, onHover, isHovered }) => {
+    const groupRef = useRef<THREE.Group>(null!);
+    const ringsRef = useRef<THREE.Group>(null!);
+    const particlesRef = useRef<THREE.Group>(null!); // Ref for the particle cloud
+    
+    // Calculate a position exactly on the 2nd spiral arm, about halfway out
+    const initialPos = useMemo(() => getSpiralPosition(2.5, 1), []);
+
+    // Generate 10000 particles for the local cluster
+    const clusterPositions = useMemo(() => {
+        const count = 10000;
+        const positions = new Float32Array(count * 3);
+        const radius = 0.8; 
+
+        for (let i = 0; i < count; i++) {
+            const i3 = i * 3;
+            // Generate points in a sphere volume with density falling off from center
+            const r = Math.pow(Math.random(), 1.5) * radius; 
+            const theta = Math.random() * 2 * Math.PI;
+            const phi = Math.acos(2 * Math.random() - 1);
+
+            const x = r * Math.sin(phi) * Math.cos(theta);
+            const y = r * Math.sin(phi) * Math.sin(theta);
+            const z = r * Math.cos(phi);
+
+            positions[i3] = x;
+            positions[i3 + 1] = y;
+            positions[i3 + 2] = z;
+        }
+        return positions;
+    }, []);
+
+    useFrame((state, delta) => {
+        if (!groupRef.current) return;
+
+        const rotationSpeed = active ? 0.1 : 0.05;
+        
+        // 1. Orbit Logic: Sync with galaxy rotation
+        const angle = delta * rotationSpeed;
+        const x = groupRef.current.position.x;
+        const z = groupRef.current.position.z;
+        groupRef.current.position.x = x * Math.cos(angle) - z * Math.sin(angle);
+        groupRef.current.position.z = x * Math.sin(angle) + z * Math.cos(angle);
+
+        // 2. Local Animation: Rotate rings
+        if (ringsRef.current) {
+            ringsRef.current.rotation.z += delta * 0.2;
+            ringsRef.current.rotation.x += delta * 0.1;
+        }
+
+        // 3. Particle Swarm Animation (Rotation + Breathing)
+        if (particlesRef.current) {
+            // Slow rotation of the cloud to simulate orbit/swirl
+            particlesRef.current.rotation.y -= delta * 0.08; 
+            particlesRef.current.rotation.z += delta * 0.02;
+
+            // "Breathing" effect - subtle expansion and contraction
+            const breath = 1 + Math.sin(state.clock.elapsedTime * 0.8) * 0.05;
+            particlesRef.current.scale.setScalar(breath);
+        }
+
+        // 4. Entrance/Exit Animation
+        const targetScale = active ? 1 : 0.001;
+        const currentScale = groupRef.current.scale.x;
+        const newScale = THREE.MathUtils.lerp(currentScale, targetScale, delta * 3);
+        groupRef.current.scale.setScalar(newScale);
+    });
+
+    // Set initial position
+    useEffect(() => {
+        if (groupRef.current) {
+            groupRef.current.position.copy(initialPos);
+            const tilt = new THREE.Euler(0.2, 0, 0);
+            groupRef.current.position.applyEuler(tilt);
+        }
+    }, [initialPos]);
+
+    const handlePointerOver = (e: any) => {
+        e.stopPropagation();
+        if (!active) return;
+        onHover(true);
+        document.body.style.cursor = 'pointer';
+    };
+
+    const handlePointerOut = () => {
+        if (!active) return;
+        onHover(false);
+        document.body.style.cursor = 'auto';
+    };
+
+    const starColor = "#40E0D0"; // Turquoise/Cyan
+    const glowColor = "#00FFFF"; 
+
+    return (
+        <group ref={groupRef} scale={0.001}> 
+            <group 
+                onPointerOver={handlePointerOver} 
+                onPointerOut={handlePointerOut}
+                scale={isHovered ? 1.2 : 1}
+            >
+                {/* --- INVISIBLE HIT BOX --- 
+                    Crucial for better UX. A large transparent sphere that captures mouse events.
+                */}
+                <mesh visible={true}> 
+                    <sphereGeometry args={[1.4, 16, 16]} />
+                    <meshBasicMaterial transparent opacity={0} depthWrite={false} />
+                </mesh>
+
+                {/* The Star Core */}
+                <mesh>
+                    <sphereGeometry args={[0.08, 32, 32]} />
+                    <meshBasicMaterial color="#fff" toneMapped={false} />
+                </mesh>
+
+                {/* Primary Glow (Inner Halo) */}
+                <mesh>
+                    <sphereGeometry args={[0.15, 32, 32]} />
+                    <meshBasicMaterial 
+                        color={starColor} 
+                        transparent 
+                        opacity={0.8} 
+                        blending={THREE.AdditiveBlending} 
+                    />
+                </mesh>
+
+                {/* Tech Rings */}
+                <group ref={ringsRef}>
+                    <mesh rotation={[Math.PI / 2, 0, 0]}>
+                        <torusGeometry args={[0.3, 0.005, 16, 64]} />
+                        <meshBasicMaterial color={starColor} transparent opacity={0.4} blending={THREE.AdditiveBlending} />
+                    </mesh>
+                    <mesh rotation={[0, Math.PI / 4, 0]}>
+                        <torusGeometry args={[0.4, 0.005, 16, 64]} />
+                        <meshBasicMaterial color={starColor} transparent opacity={0.3} blending={THREE.AdditiveBlending} />
+                    </mesh>
+                </group>
+
+                {/* Local Cluster Particles (Animated Group) */}
+                <group ref={particlesRef}>
+                    <Points positions={clusterPositions} stride={3} frustumCulled={false}>
+                        <PointMaterial
+                            transparent
+                            color={starColor}
+                            size={0.02}
+                            sizeAttenuation={true}
+                            depthWrite={false}
+                            blending={THREE.AdditiveBlending}
+                            opacity={0.6}
+                        />
+                    </Points>
+                </group>
+
+  
+                {/* Label */}
+                <Html 
+                    position={[0.2, 0.2, 0]} 
+                    center 
+                    distanceFactor={8}
+                    style={{ 
+                        pointerEvents: 'none', 
+                        opacity: active ? 1 : 0,
+                        transition: 'opacity 0.5s',
+                        display: active ? 'block' : 'none'
+                    }}
+                >
+                    <div className={`flex flex-col items-start transition-all duration-300 ${isHovered ? 'scale-110' : 'scale-100 opacity-80'}`}>
+                        <div className="flex items-center gap-2">
+                            <div className={`h-[1px] transition-all duration-300 ${isHovered ? 'w-12 bg-cyan-400' : 'w-8 bg-white/50'}`}></div>
+                            <h1 className="text-lg font-bold text-white tracking-widest uppercase drop-shadow-[0_0_10px_rgba(64,224,208,0.8)]">
+                                Wisdom<span className="text-cyan-300">SQL</span>
+                            </h1>
+                        </div>
+                        {isHovered && (
+                            <p className="text-xs text-cyan-100/90 ml-14 max-w-[180px] leading-tight mt-1 font-light backdrop-blur-md bg-black/40 p-2 rounded border-l-2 border-cyan-400 shadow-[0_0_15px_rgba(0,255,255,0.2)]">
+                                Core Intelligence Node.<br/>Processing logic active.
+                            </p>
+                        )}
+                    </div>
+                </Html>
+            </group>
+        </group>
+    );
+};
+
+const CameraRig: React.FC<{ active: boolean; focusTarget: boolean }> = ({ active, focusTarget }) => {
     const { camera, mouse } = useThree();
-    const targetPosition = new THREE.Vector3();
+    const targetPos = new THREE.Vector3();
+    const lookAtPos = new THREE.Vector3();
 
     useFrame((state, delta) => {
         if (active) {
-            // "Warp" mode: Fly closer to the center and slightly up
-            targetPosition.set(0, 1.5, 2.5);
+            // If hovering WisdomSQL (focusTarget), camera drifts slightly closer/around
+            if (focusTarget) {
+                // Zoom in closer for detail view
+                targetPos.set(0, 1.2, 3.8); 
+            } else {
+                // Normal Explore Mode
+                targetPos.set(0, 1.5, 3.5);
+            }
             
-            // Smoothly interpolate camera position
-            camera.position.lerp(targetPosition, 1.5 * delta);
+            targetPos.x += mouse.x * 0.2;
+            targetPos.y += mouse.y * 0.2;
+            
+            camera.position.lerp(targetPos, delta * 0.8);
+            
+            // Smooth look at
+            lookAtPos.set(0, 0, 0);
+            camera.lookAt(lookAtPos);
         } else {
-            // "Orbit" mode: Further away, influenced by mouse for parallax
-            // Mouse x/y are normalized between -1 and 1
-            const x = mouse.x * 3;
-            const y = mouse.y * 3 + 4; // Elevated view
-            
-            targetPosition.set(x, y, 9);
-            camera.position.lerp(targetPosition, 1 * delta);
+            // Orbit Mode
+            targetPos.set(mouse.x * 5, mouse.y * 2 + 6, 12);
+            camera.position.lerp(targetPos, delta * 0.8);
+            camera.lookAt(0, 0, 0);
         }
-        
-        // Always look at the galactic center
-        camera.lookAt(0, 0, 0);
     });
 
     return null;
 }
 
 export const Scene: React.FC<SceneProps> = ({ active }) => {
+  const [hoveringWisdom, setHoveringWisdom] = useState(false);
+
   return (
     <Canvas
-      camera={{ position: [0, 4, 9], fov: 55 }}
+      camera={{ position: [0, 6, 12], fov: 50 }}
       gl={{ 
         antialias: true,
         powerPreference: "high-performance",
-        alpha: false // Black background handled by css or color attach
       }}
-      dpr={[1, 2]} // Support high DPI screens for sharper stars
+      dpr={[1, 2]}
     >
       <color attach="background" args={['#030305']} />
       
-      {/* Gentle floating motion for the whole celestial object */}
       <Float speed={1.5} rotationIntensity={0.1} floatIntensity={0.2}>
-         <Galaxy active={active} />
+         {/* Pass hover state to Galaxy to trigger dimming */}
+         <Galaxy active={active} dimmed={hoveringWisdom} />
+         
+         {/* The Special Embedded Star System */}
+         <WisdomSystem active={active} onHover={setHoveringWisdom} isHovered={hoveringWisdom} />
       </Float>
 
-      {/* Deep background field of distant stars */}
-      <Stars radius={50} depth={50} count={3000} factor={4} saturation={0} fade speed={0.5} />
+      {/* Background stars also fade when focusing on WisdomSQL */}
+      <group>
+         <Stars radius={50} depth={50} count={3000} factor={4} saturation={0} fade speed={0.5} />
+      </group>
 
-      <CameraRig active={active} />
+      <CameraRig active={active} focusTarget={hoveringWisdom} />
       
-      {/* Fog to blend the distant stars into the background color seamlessly */}
-      <fog attach="fog" args={['#030305', 10, 25]} />
-      
-      {/* Post-processing-like effects using lights */}
+      <fog attach="fog" args={['#030305', 8, 30]} />
       <ambientLight intensity={0.5} />
+      
+      {/* Dynamic lighting for WisdomSQL when active */}
+      <pointLight 
+        position={[2, 1, 2]} 
+        color="#40E0D0" 
+        intensity={active && hoveringWisdom ? 3 : 0} 
+        distance={8}
+        decay={2}
+      />
     </Canvas>
   );
 };
